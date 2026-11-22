@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node-version: [18, 20, 22]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Run CLI self-test
+        run: node skills/fyi/scripts/selftest.mjs
+
+      - name: Run Node test suites
+        run: node --test skills/fyi/scripts/*.test.mjs skills/fyi/scripts/*-test.mjs
+
+      - name: Check repository store health
+        run: node skills/fyi/scripts/fyi.mjs doctor

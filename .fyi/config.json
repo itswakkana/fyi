@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "name": "fyi",
+  "createdAt": "2026-11-10",
+  "updatedAt": "2026-11-10",
+  "apps": [],
+  "settings": {
+    "staleAfterDays": 180
+  }
+}

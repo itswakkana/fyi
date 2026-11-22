@@ -1,0 +1,38 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/skills/fyi/scripts/fyi.mjs\" hook run session-start --host claude",
+            "timeout": 10,
+            "statusMessage": "Loading fyi project memory"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/skills/fyi/scripts/fyi.mjs\" hook run prompt-submit --host claude",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/skills/fyi/scripts/fyi.mjs\" hook run stop --host claude",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

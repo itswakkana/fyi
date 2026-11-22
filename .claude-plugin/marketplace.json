@@ -1,0 +1,23 @@
+{
+  "name": "fyi",
+  "owner": {
+    "name": "Ryan"
+  },
+  "metadata": {
+    "description": "Project memory for multi-app repos across Claude Code, Codex CLI, and OpenCode."
+  },
+  "plugins": [
+    {
+      "name": "fyi",
+      "source": "./",
+      "description": "One skill and unified lifecycle hooks backed by a version-controlled .fyi store of reusable debugging patterns, business knowledge, runbooks, docs, and scripts.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Ryan"
+      },
+      "homepage": "https://github.com/itswakkana/fyi",
+      "repository": "https://github.com/itswakkana/fyi",
+      "license": "MIT"
+    }
+  ]
+}
