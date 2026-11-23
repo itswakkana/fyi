@@ -1,7 +1,7 @@
 {
   "name": "fyi",
   "description": "Project memory for multi-app repos. One skill and unified lifecycle hooks backed by a version-controlled .fyi store of reusable debugging patterns, business knowledge, runbooks, docs, and scripts.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": {
     "name": "Ryan"
   },

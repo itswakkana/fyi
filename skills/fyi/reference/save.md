@@ -52,6 +52,8 @@ fyi new script "Dump slow queries" --file ./dump-slow-queries.mjs --app api --de
 
 `--app` may repeat or comma-separate. Knowledge with one app is written to `knowledge/<app>/`; knowledge with zero or several apps goes to `knowledge/shared/` with `apps: []` (or `apps: [shared]`). `shared` is reserved and does not need to appear in `config.json`.
 
+Write concrete symptom words in `title`, `tags`, and `description` — automatic prompt hooks rank against metadata only (not the body). For bilingual teams (e.g. English and Chinese), include key domain terms in both languages in `tags` or `description` so prompts in either language match reliably.
+
 `fyi new script --file <source>` accepts only the supported script extensions (`.mjs`, `.js`, `.cjs`, `.sh`, `.bash`, `.zsh`, `.py`, `.rb`). The CLI writes frontmatter, a body skeleton, and rebuilds the index. Let it create the frontmatter; on later updates, edit only the fields you are changing and run `fyi index`.
 
 ## Step 5: Write the body

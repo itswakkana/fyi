@@ -1,6 +1,6 @@
 {
   "name": "@itswakkana/fyi",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Project memory for multi-app repos across Claude Code, Codex CLI, and OpenCode.",
   "type": "module",
   "license": "MIT",

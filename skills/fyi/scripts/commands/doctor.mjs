@@ -1,31 +1,39 @@
 import { existsSync } from 'node:fs';
-import { inspectIntegrations } from '../lib/hooks.mjs';
+import { inspectIntegrations, skillVersionDrift } from '../lib/hooks.mjs';
 import {
   configPath,
   indexMarkdownPath,
   indexPath,
-  isInitialized,
-  readConfig,
+  snapshot,
   storePath,
-  walkArtifacts,
 } from '../lib/store.mjs';
 import { validateStore } from '../lib/validate.mjs';
 import { color, fail, print, readJson, toPosix } from '../lib/util.mjs';
 
 export function run(ctx) {
   const { root, json } = ctx;
-  if (!isInitialized(root)) return fail('store is not initialized; run `fyi init` first.');
+  const snap = snapshot(root);
+  if (!snap.initialized) return fail('store is not initialized; run `fyi init` first.');
 
-  const config = readConfig(root);
-  const artifacts = walkArtifacts(root);
+  const { config, artifacts, apps } = snap;
   const report = validateStore(root, artifacts, config);
   const integrations = inspectIntegrations(root);
   const hookAgents = Object.entries(integrations)
     .filter(([, info]) => info.hooks.installed)
     .map(([name]) => name);
-  const hookIssues = Object.entries(integrations)
-    .filter(([, info]) => info.issue)
-    .map(([name, info]) => `${name} hooks: ${info.issue}`);
+  const hookIssues = [];
+  for (const [name, info] of Object.entries(integrations)) {
+    for (const issue of info.issues || (info.issue ? [info.issue] : [])) {
+      hookIssues.push(`${name} hooks: ${issue}`);
+    }
+  }
+  const drift = skillVersionDrift(integrations);
+  if (drift) {
+    const summary = Object.entries(drift)
+      .map(([agent, ver]) => `${agent}=${ver}`)
+      .join(', ');
+    hookIssues.push(`local skill copies have mismatched versions (${summary}); re-run \`fyi install --force\``);
+  }
   for (const issue of hookIssues) report.warnings.push(issue);
 
   const checks = [
@@ -43,8 +51,8 @@ export function run(ctx) {
     },
     {
       name: 'apps',
-      ok: Boolean((config?.apps || []).length),
-      detail: (config?.apps || []).map((app) => app.name).join(', ') || 'none detected',
+      ok: apps.length > 0,
+      detail: apps.join(', ') || 'none detected',
       soft: true,
     },
     {

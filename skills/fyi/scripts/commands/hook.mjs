@@ -1,9 +1,10 @@
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { isAbsolute, relative, resolve } from 'node:path';
 import {
   SUPPORTED_AGENTS,
   SUPPORTED_EVENTS,
   SUPPORTED_HOSTS,
+  evaluatePostToolUse,
   evaluatePromptSubmit,
   evaluateSessionStart,
   evaluateStop,
@@ -11,6 +12,8 @@ import {
   inspectIntegrations,
   installHooks,
   parseAgentList,
+  projectHasFyiHooks,
+  skillVersionDrift,
   uninstallHooks,
 } from '../lib/hooks.mjs';
 import {
@@ -21,13 +24,14 @@ import {
   normalizeRoot,
   print,
   toPosix,
+  warn,
 } from '../lib/util.mjs';
 
 const HOOK_USAGE = `Usage:
   fyi hook install [--agents claude,codex,opencode|all] [--root <dir>] [--dry-run] [--force]
   fyi hook uninstall [--agents claude,codex,opencode|all] [--root <dir>] [--dry-run] [--force]
   fyi hook status [--root <dir>] [--json]
-  fyi hook run <session-start|prompt-submit|stop> [--host claude|codex|opencode|plain] [--root <dir>]`;
+  fyi hook run <session-start|prompt-submit|post-tool-use|stop> [--host claude|codex|opencode|plain] [--source plugin] [--root <dir>]`;
 
 export function run(ctx) {
   const { positionals } = ctx;
@@ -58,16 +62,25 @@ function readStdinPayload() {
   }
 }
 
-function resolveHookRoot(ctx, payload) {
+function isSameOrInside(parent, child) {
+  const rel = relative(parent, child);
+  return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
+}
+
+function resolveHookRoot(ctx, payload, host) {
   if (ctx.flags.root && ctx.flags.root !== true) {
     return resolve(normalizeRoot(ctx.flags.root));
   }
-  if (typeof payload?.cwd === 'string' && payload.cwd.trim()) {
-    return resolve(findProjectRoot(payload.cwd));
+  const envDir = process.env.CLAUDE_PROJECT_DIR ? resolve(process.env.CLAUDE_PROJECT_DIR) : '';
+  const cwdDir = typeof payload?.cwd === 'string' && payload.cwd.trim() ? resolve(payload.cwd.trim()) : '';
+
+  // In Claude Code, prefer CLAUDE_PROJECT_DIR over a nested cwd (e.g. a submodule),
+  // while still honoring an unrelated payload.cwd (such as test fixtures).
+  if (host === 'claude' && envDir && (!cwdDir || isSameOrInside(envDir, cwdDir))) {
+    return resolve(findProjectRoot(envDir));
   }
-  if (process.env.CLAUDE_PROJECT_DIR) {
-    return resolve(findProjectRoot(process.env.CLAUDE_PROJECT_DIR));
-  }
+  if (cwdDir) return resolve(findProjectRoot(cwdDir));
+  if (envDir) return resolve(findProjectRoot(envDir));
   return ctx.root;
 }
 
@@ -86,27 +99,49 @@ function runHookEvent(ctx, args) {
     return fail(`unknown host "${host}"; expected one of: ${SUPPORTED_HOSTS.join(', ')}`);
   }
 
-  const payload = readStdinPayload();
-  const root = resolveHookRoot(ctx, payload);
+  const sourceRaw = ctx.flags.source;
+  if (sourceRaw === true) return fail('--source requires a value');
+  const source = String(sourceRaw || '').toLowerCase();
 
-  let evaluation;
-  if (event === 'session-start') {
-    evaluation = evaluateSessionStart(root, { host });
-  } else if (event === 'prompt-submit') {
-    const prompt =
-      args.slice(1).join(' ').trim() ||
-      payload.prompt ||
-      payload.user_prompt ||
-      payload.message ||
-      '';
-    evaluation = evaluatePromptSubmit(root, prompt, { host });
-  } else {
-    evaluation = evaluateStop(root, payload);
+  // Hooks must always fail open so transient filesystem errors never disrupt a session.
+  try {
+    const payload = readStdinPayload();
+    const root = resolveHookRoot(ctx, payload, host);
+
+    // Yield to project-level hooks when the same agent has both plugin and project hooks wired.
+    if (source === 'plugin' && host !== 'plain' && projectHasFyiHooks(root, host)) {
+      return 0;
+    }
+
+    let evaluation;
+    if (event === 'session-start') {
+      evaluation = evaluateSessionStart(root, { host, source: payload.source });
+    } else if (event === 'prompt-submit') {
+      const prompt =
+        args.slice(1).join(' ').trim() ||
+        payload.prompt ||
+        payload.user_prompt ||
+        payload.message ||
+        '';
+      evaluation = evaluatePromptSubmit(root, prompt, {
+        host,
+        transcriptPath: payload.transcript_path,
+      });
+    } else if (event === 'post-tool-use') {
+      evaluation = evaluatePostToolUse(root, payload, { host });
+    } else {
+      evaluation = evaluateStop(root, payload);
+    }
+
+    const output = formatHookOutput(host, event, evaluation);
+    if (output) process.stdout.write(`${output}\n`);
+    return 0;
+  } catch (error) {
+    if (process.env.FYI_HOOK_DEBUG === '1') {
+      warn(`fyi hook debug (${event}/${host}): ${error?.stack || error}`);
+    }
+    return 0;
   }
-
-  const output = formatHookOutput(host, event, evaluation);
-  if (output) process.stdout.write(`${output}\n`);
-  return 0;
 }
 
 function runHookInstall(ctx) {
@@ -135,7 +170,16 @@ function runHookInstall(ctx) {
     print(
       color(
         '33',
-        'Note: no project-local skill was found in this repo, so hooks reference an absolute path on this machine. Run `fyi install <repo>` for team-portable relative hook paths.',
+        'Note: no project-local skill was found, so hooks reference an absolute path on this machine (Claude wrote .claude/settings.local.json to keep it out of git). Run `fyi install <repo>` for team-portable relative hook paths.',
+      ),
+    );
+  }
+  if (results.some((item) => item.agent === 'codex')) {
+    print('');
+    print(
+      color(
+        '2',
+        'Codex CLI: approve or trust project hooks via `/hooks` after installing or updating .codex/hooks.json.',
       ),
     );
   }
@@ -176,8 +220,9 @@ function runHookUninstall(ctx) {
 function runHookStatus(ctx) {
   const { root, json } = ctx;
   const agents = inspectIntegrations(root);
+  const drift = skillVersionDrift(agents);
   if (json) {
-    print(JSON.stringify({ root, agents }, null, 2));
+    print(JSON.stringify({ root, agents, versionDrift: drift }, null, 2));
     return 0;
   }
 
@@ -186,11 +231,23 @@ function runHookStatus(ctx) {
   for (const [name, info] of Object.entries(agents)) {
     const skillMark = info.skill.installed ? color('32', 'skill:yes') : color('2', 'skill:no ');
     const hookMark = info.hooks.installed ? color('32', 'hooks:yes') : color('2', 'hooks:no ');
-    const detail = info.hooks.installed
-      ? `${info.hooks.path} (${info.hooks.events.join(', ')})`
-      : info.hooks.path;
+    const files = info.hooks.files?.length ? info.hooks.files.join(', ') : info.hooks.path;
+    const detail = info.hooks.installed ? `${files} (${info.hooks.events.join(', ')})` : info.hooks.path;
     print(`  ${name.padEnd(9)} ${skillMark}  ${hookMark}  ${detail}`);
-    if (info.issue) print(`            ${color('33', `warning: ${info.issue}`)}`);
+    for (const issue of info.issues || (info.issue ? [info.issue] : [])) {
+      print(`            ${color('33', `warning: ${issue}`)}`);
+    }
+  }
+  if (drift) {
+    const summary = Object.entries(drift)
+      .map(([agent, ver]) => `${agent}=${ver}`)
+      .join(', ');
+    print('');
+    print(color('33', `warning: local skill copies have mismatched versions (${summary}); re-run \`fyi install --force\`.`));
+  }
+  if (agents.codex?.hooks.installed) {
+    print('');
+    print(color('2', 'note: Codex trust approval is stored outside the repo and is not inspected here.'));
   }
   return 0;
 }

@@ -2,11 +2,12 @@
   "hooks": {
     "SessionStart": [
       {
+        "matcher": "startup|clear|compact",
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/skills/fyi/scripts/fyi.mjs\" hook run session-start --host claude",
-            "timeout": 10,
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/skills/fyi/scripts/fyi.mjs\" hook run session-start --host claude --source plugin",
+            "timeout": 5,
             "statusMessage": "Loading fyi project memory"
           }
         ]
@@ -17,19 +18,20 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/skills/fyi/scripts/fyi.mjs\" hook run prompt-submit --host claude",
-            "timeout": 10
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/skills/fyi/scripts/fyi.mjs\" hook run prompt-submit --host claude --source plugin",
+            "timeout": 5
           }
         ]
       }
     ],
-    "Stop": [
+    "PostToolUse": [
       {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/skills/fyi/scripts/fyi.mjs\" hook run stop --host claude",
-            "timeout": 10
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/skills/fyi/scripts/fyi.mjs\" hook run post-tool-use --host claude --source plugin",
+            "timeout": 5
           }
         ]
       }

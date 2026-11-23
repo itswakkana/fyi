@@ -279,6 +279,70 @@ export function indexStatus(root, artifacts = walkArtifacts(root)) {
   return 'fresh';
 }
 
+/**
+ * One read of the store's state, shared by `context`, hooks, and diagnostics
+ * so they cannot drift apart.
+ */
+export function snapshot(root) {
+  const initialized = isInitialized(root);
+  if (!initialized) {
+    return {
+      initialized: false,
+      config: null,
+      issues: [],
+      artifacts: [],
+      counts: counts([]),
+      index: 'missing',
+      apps: [],
+    };
+  }
+  const config = readConfig(root);
+  const artifacts = walkArtifacts(root);
+  return {
+    initialized: true,
+    config,
+    issues: configIssues(config),
+    artifacts,
+    counts: counts(artifacts),
+    index: indexStatus(root, artifacts),
+    apps: (config?.apps || []).map((app) => app.name),
+  };
+}
+
+/**
+ * Cheap change detector for caching: file count plus newest mtime under .fyi/,
+ * using stat only (no reads or hashing).
+ */
+export function storeFingerprint(root) {
+  const store = storePath(root);
+  if (!existsSync(store)) return 'missing';
+  let files = 0;
+  let newest = 0;
+  const visit = (dir) => {
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry.isSymbolicLink() || entry.name === 'node_modules') continue;
+      const abs = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (!entry.name.startsWith('.')) visit(abs);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      const stat = statSafe(abs);
+      if (!stat) continue;
+      files++;
+      if (stat.mtimeMs > newest) newest = stat.mtimeMs;
+    }
+  };
+  visit(store);
+  return `${files}:${newest}`;
+}
+
 export function rebuildIndex(root, artifacts = walkArtifacts(root)) {
   assertSafeStoreRoot(root, { allowMissing: false });
   const config = readConfig(root) || emptyConfig(root);

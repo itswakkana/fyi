@@ -1,7 +1,7 @@
 ---
 name: fyi
 description: "Use when a task needs project knowledge that lives outside the code: how to trace a request across services, which logs or queries to search, who owns a module, how a business flow or rule works, how to deploy or roll back, how to respond to an incident, how to onboard onto a module, or when a debugging session produced a reusable recipe worth saving. Also use when the user asks to find, save, organize, audit, or initialize the project's .fyi knowledge store. Built for multi-app monorepos where one developer's discovery should become everyone's starting point. Not for ordinary code edits, design work, or general web research."
-version: 1.0.0
+version: 1.0.1
 user-invocable: true
 argument-hint: "[context · find <query> · new <type> <title> · init · organize · doctor · hook · list · show · index · install]"
 license: MIT

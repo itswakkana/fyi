@@ -1,24 +1,12 @@
 import { inspectIntegrations } from '../lib/hooks.mjs';
-import {
-  configIssues,
-  counts,
-  indexStatus,
-  isInitialized,
-  readConfig,
-  storePath,
-  walkArtifacts,
-} from '../lib/store.mjs';
+import { snapshot, storePath } from '../lib/store.mjs';
 import { color, print, toPosix } from '../lib/util.mjs';
 
 export function run(ctx) {
   const { root, json } = ctx;
   const store = storePath(root);
-  const initialized = isInitialized(root);
-  const config = readConfig(root);
-  const artifacts = walkArtifacts(root);
-  const summary = counts(artifacts);
-  const status = initialized ? indexStatus(root, artifacts) : 'missing';
-  const apps = (config?.apps || []).map((app) => app.name);
+  const snap = snapshot(root);
+  const { initialized, config, artifacts, counts: summary, index: status, apps, issues } = snap;
   const integrations = inspectIntegrations(root);
 
   const directives = [];
@@ -29,7 +17,7 @@ export function run(ctx) {
   } else if (!summary.unarchived) {
     directives.push('STORE_EMPTY — capture the first artifact with `fyi new <type> "<title>"`.');
   }
-  for (const issue of configIssues(config)) directives.push(`CONFIG_INVALID — ${issue}`);
+  for (const issue of issues) directives.push(`CONFIG_INVALID — ${issue}`);
   if (initialized && status !== 'fresh') directives.push('INDEX_STALE — run `fyi index`.');
   if (config && !apps.length) {
     directives.push('NO_APPS — run `fyi init --refresh` after the repo has app manifests.');

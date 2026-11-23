@@ -70,7 +70,7 @@ node .claude/skills/fyi/scripts/fyi.mjs hook install --agents all
 node .claude/skills/fyi/scripts/fyi.mjs hook status
 ```
 
-> **Note:** OpenCode loads skills and `.opencode/plugins/` at startup — restart OpenCode after installing or updating hooks.
+> **Note:** OpenCode loads skills and `.opencode/plugins/` at startup — restart OpenCode after installing or updating hooks. In Codex CLI, approve project hooks via `/hooks` after installing or updating `.codex/hooks.json`.
 
 > **Tip:** Commands below are written as `fyi ...`. Because `fyi` installs no global binary, run `node skills/fyi/scripts/fyi.mjs ...` (in this repo) or `node .claude/skills/fyi/scripts/fyi.mjs ...` (in a target repo), or alias `fyi` in your shell.
 
@@ -80,16 +80,16 @@ The CLI walks upward from the current working directory and stops at the nearest
 
 | Agent | Installed skill path | Lifecycle hook config | Wired events |
 |---|---|---|---|
-| **Claude Code** | `.claude/skills/fyi/` (+ `.claude-plugin/`) | `.claude/settings.json` (non-destructive merge) | `SessionStart`, `UserPromptSubmit`, `Stop` |
-| **Codex CLI** | `.agents/skills/fyi/` | `.codex/hooks.json` (non-destructive merge) | `SessionStart`, `UserPromptSubmit`, `Stop` |
-| **OpenCode** | `.opencode/skills/fyi/` | `.opencode/plugins/fyi.js` (zero-dependency ESM plugin) | `chat.message`, `experimental.chat.system.transform`, `experimental.session.compacting`, `event(session.idle)` |
+| **Claude Code** | `.claude/skills/fyi/` (+ `.claude-plugin/`) | `.claude/settings.json` (or `.claude/settings.local.json` for machine-local paths) | `SessionStart` (`startup\|clear\|compact`), `UserPromptSubmit`, `PostToolUse` |
+| **Codex CLI** | `.agents/skills/fyi/` | `.codex/hooks.json` (non-destructive merge) | `SessionStart`, `UserPromptSubmit`, `PostToolUse` |
+| **OpenCode** | `.opencode/skills/fyi/` | `.opencode/plugins/fyi.js` (zero-dependency ESM plugin) | `chat.message`, `experimental.chat.system.transform`, `experimental.session.compacting`, `tool.execute.after`, `event(session.idle)` |
 
-All three hosts share one read-only hook engine ([skills/fyi/scripts/lib/hooks.mjs](skills/fyi/scripts/lib/hooks.mjs)):
+All three hosts share one read-only, fail-open hook engine ([skills/fyi/scripts/lib/hooks.mjs](skills/fyi/scripts/lib/hooks.mjs)):
 
-1. **Session context:** Injects a compact `<fyi-context>` block with store status, detected apps, artifact counts, CLI path, and core search/capture rules.
-2. **Zero-noise prompt matching:** On each prompt, runs a fast local search against `.fyi/` and injects `<fyi-matches>` only when high-confidence artifacts match. Unrelated coding prompts stay completely silent.
-3. **Non-blocking turn hygiene:** On `Stop` / `session.idle`, respects `stop_hook_active` (never loops, never blocks) and stays silent unless `.fyi/` index is stale or config has issues.
-4. **Safe config management:** `fyi hook install` and `fyi hook uninstall` preserve all unrelated user settings and hooks, refuse invalid JSON and symlinks, and never overwrite unmanaged OpenCode plugins without `--force`.
+1. **Opt-in session context:** Injects a compact `<fyi-context>` block (with absolute CLI + `--root` paths) only when the repo uses `.fyi/` or has a local `fyi` skill. Skips `resume` and deduplicates automatically when both the Claude plugin and project hooks are installed.
+2. **Precision-first prompt matching:** Uses word-boundary tokenization (`Intl.Segmenter` for ASCII + CJK), light stemming, IDF weighting over metadata only, and multi-term gating so unrelated coding prompts stay silent. Deduplicates against the session transcript tail so the same artifact is not injected repeatedly.
+3. **Edit-time index hygiene:** On `PostToolUse` / `tool.execute.after`, stays completely silent for code edits and only nudges the agent when `.fyi/` files are modified (reminding it to run `index`/`doctor` or not to hand-edit `INDEX.md`/`index.json`).
+4. **Safe config management:** `fyi hook install` and `fyi hook uninstall` preserve all unrelated user settings and hooks, refuse invalid JSON and symlinks, verify the actual configured CLI path in `doctor`/`hook status`, and never overwrite unmanaged OpenCode plugins without `--force`.
 
 Knowledge capture and redaction always stay with the skill and developer — hooks never auto-save raw transcripts.
 

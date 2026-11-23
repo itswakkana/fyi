@@ -3,7 +3,7 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, statSync,
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const VERSION = '1.0.0';
+export const VERSION = '1.0.1';
 export const SKILL_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 export const SCRIPTS_DIR = join(SKILL_DIR, 'scripts');
 
@@ -26,6 +26,7 @@ const VALUE_FLAGS = new Set([
   'agent',
   'agents',
   'host',
+  'source',
 ]);
 
 const BOOLEAN_FLAGS = new Set([
