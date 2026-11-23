@@ -442,6 +442,8 @@ test('hook install refuses invalid JSON, unmanaged OpenCode plugins, and symlink
 
 test('generated OpenCode plugin loads as ESM, handles edits, caches reads, and deduplicates toasts', async (t) => {
   const repo = fixture(t);
+  // Node 18 requires package.json type=module to dynamically import a .js file; OpenCode runs on Bun.
+  writeFileSync(join(repo, 'package.json'), '{"type":"module"}\n');
   const installed = runCli(['install', repo, '--agents', 'opencode', '--hooks', '--init']);
   assert.equal(installed.status, 0, installed.stderr);
   seedSampleStore(repo);
